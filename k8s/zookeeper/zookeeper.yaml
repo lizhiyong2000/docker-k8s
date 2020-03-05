@@ -1,0 +1,159 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper-svc
+  labels:
+    app: zookeeper-svc
+spec:
+  ports:
+  - port: 2888
+    name: server
+  - port: 3888
+    name: leader-election
+  clusterIP: None
+  selector:
+    app: zookeeper
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zookeeper-cm
+data:
+  jvm.heap: "1G"
+  tick: "2000"
+  init: "10"
+  sync: "5"
+  client.cnxns: "60"
+  snap.retain: "3"
+  purge.interval: "0"
+---
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: zookeeper-pdb
+spec:
+  selector:
+    matchLabels:
+      app: zookeeper
+  minAvailable: 2
+---
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: zookeeper
+spec:
+  serviceName: zookeeper-svc
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+    spec:
+      # affinity:
+      #   podAntiAffinity:
+      #     requiredDuringSchedulingIgnoredDuringExecution:
+      #       - labelSelector:
+      #           matchExpressions:
+      #             - key: "app"
+      #               operator: In
+      #               values: 
+      #               - zookeeper
+      #         topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: zookeeper
+        imagePullPolicy: Always
+        image: lizhiyong2000/zookeeper:3.4.12
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+        ports:
+        - containerPort: 2181
+          name: client
+        - containerPort: 2888
+          name: server
+        - containerPort: 3888
+          name: leader-election
+        env:
+        - name : ZOO_REPLICAS
+          value: "3"
+        - name : ZOO_HEAP_SIZE
+          valueFrom:
+            configMapKeyRef:
+                name: zookeeper-cm
+                key: jvm.heap
+        - name : ZOO_TICK_TIME
+          valueFrom:
+            configMapKeyRef:
+                name: zookeeper-cm
+                key: tick
+        - name : ZOO_INIT_LIMIT
+          valueFrom:
+            configMapKeyRef:
+                name: zookeeper-cm
+                key: init
+        - name : ZOO_SYNC_LIMIT
+          valueFrom:
+            configMapKeyRef:
+                name: zookeeper-cm
+                key: tick
+        - name : ZOO_MAX_CLIENT_CNXNS
+          valueFrom:
+            configMapKeyRef:
+                name: zookeeper-cm
+                key: client.cnxns
+        - name: ZOO_SNAP_RETAIN_COUNT
+          valueFrom:
+            configMapKeyRef:
+                name: zookeeper-cm
+                key: snap.retain
+        - name: ZOO_PURGE_INTERVAL
+          valueFrom:
+            configMapKeyRef:
+                name: zookeeper-cm
+                key: purge.interval
+        - name: ZOO_PORT
+          value: "2181"
+        # command:
+        # - sh
+        # - -c
+        # - zookeeperGenConfig.sh && zookeeperServer.sh start-foreground
+        readinessProbe:
+          exec:
+            command:
+            - "zooOK.sh"
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - "zooOK.sh"
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+        volumeMounts:
+        - name: datadir
+          mountPath: /opt/zookeeper/data
+        - name: datalogdir
+          mountPath: /opt/zookeeper/datalog
+      # securityContext:
+      #   runAsUser: 1001
+      #   fsGroup: 1001
+  volumeClaimTemplates:
+  - metadata:
+      name: datadir
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+      storageClassName: nfs-storage
+  - metadata:
+      name: datalogdir
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+      storageClassName: nfs-storage
+

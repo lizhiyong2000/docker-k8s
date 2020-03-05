@@ -1,0 +1,42 @@
+version: '2'
+services:
+  elasticsearch:
+    image: lizhiyong2000/elasticsearch:6.3.0
+    command: /usr/local/bin/docker-entrypoint.sh eswrapper
+    hostname: elasticsearch
+    environment:
+      - "ES_JAVA_OPTS=-Xms1536m -Xmx1536m"
+    volumes:
+      - /opt/data/elk/elasticsearch/data:/opt/elasticsearch/data
+    expose:
+      - 9200
+      - 9300
+    ports:
+      - 9200:9200
+      - 9300:9300
+
+  kibana:
+    image: lizhiyong2000/kibana:6.3.0
+    command: /usr/local/bin/kibana-docker
+    hostname: kibana
+    links:
+      - elasticsearch
+    expose:
+      - 5601
+    ports:
+      - 5601:5601
+
+  logstash:
+    image: lizhiyong2000/logstash:6.3.0
+    hostname: logstash
+    volumes:
+      - /opt/data/elk/logstash/pipeline:/opt/logstash/pipeline
+    links:
+      - elasticsearch
+      - kibana
+    expose:
+      - 9600
+      - 5044
+    ports:
+      - 9600:9600
+      - 5044:5044

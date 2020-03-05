@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: tomcat
+  labels:
+    component: tomcat
+spec:
+  type: NodePort
+  selector:
+    component: tomcat
+  ports:
+  - name: http
+    port: 8080
+    targetPort: http
+    nodePort: 30080
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: tomcat
+  labels:
+    component: tomcat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+     component: tomcat
+  template:
+    metadata:
+      labels:
+        component: tomcat
+    spec:
+      containers:
+      - name: tomcat
+        image: tomcat:latest
+        resources:
+          limits:
+            cpu: 1000m
+          requests:
+            cpu: 100m
+        ports:
+        - containerPort: 8080
+          name: http
+        volumeMounts:
+        - mountPath: /usr/local/tomcat/logs
+          name: accesslogs
+        env:
+         - name: aliyun_logs_catalina                                 
+           value: "stdout"                                             ##采集标准输出日志
+         - name: aliyun_logs_access
+           value: "/usr/local/tomcat/logs/localhost_access_log.*.txt"              ## 采集容器内日志文件 
+      volumes:
+        - name: accesslogs
+          emptyDir: {}

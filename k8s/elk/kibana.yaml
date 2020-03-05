@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kibana
+  labels:
+    component: kibana
+spec:
+  type: NodePort
+  selector:
+    component: kibana
+  ports:
+  - name: http
+    port: 5601
+    targetPort: http
+    nodePort: 30561
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: kibana
+  labels:
+    component: kibana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+     component: kibana
+  template:
+    metadata:
+      labels:
+        component: kibana
+    spec:
+      containers:
+      - name: kibana
+        image: lizhiyong2000/kibana:6.3.0
+        env:
+        - name: CLUSTER_NAME
+          value: es_cluster
+        - name: ELASTICSEARCH_URL
+          value: http://es-data-svc:9200
+        # - name: SERVER_BASEPATH
+        #   value: /api/v1/namespaces/default/services/kibana:http/proxy
+        resources:
+          limits:
+            cpu: 1000m
+          requests:
+            cpu: 100m
+        ports:
+        - containerPort: 5601
+          name: http

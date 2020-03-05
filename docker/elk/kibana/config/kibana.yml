@@ -1,0 +1,8 @@
+---
+# Default Kibana configuration from kibana-docker.
+
+server.name: kibana
+server.host: "0"
+elasticsearch.url: ${ELASTICSEARCH_URL}
+xpack.monitoring.ui.container.elasticsearch.enabled: true
+logging.dest: /var/log/kibana/kibana.log

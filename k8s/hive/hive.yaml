@@ -1,0 +1,103 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: hive-svc
+  labels:
+    component: hive-svc
+spec:
+  type: NodePort
+  selector:
+    component: hive
+  ports:
+  - name: http
+    port: 10000
+    targetPort: http
+    nodePort: 31000
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-svc
+  labels:
+    component: mysql-svc
+spec:
+  type: NodePort
+  selector:
+    component: mysql
+  ports:
+  - name: mysql
+    port: 3306
+    targetPort: mysql
+    nodePort: 31336
+---
+
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: hive
+  labels:
+    component: hive
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+     component: hive
+  template:
+    metadata:
+      labels:
+        component: hive
+    spec:
+      containers:
+      - name: hive
+        image: lizhiyong2000/hive:2.3.3
+        # env:
+        # - name: CLUSTER_NAME
+        #   value: es_cluster
+        # - name: ELASTICSEARCH_URL
+        #   value: http://es-data-svc:9200
+        # # - name: SERVER_BASEPATH
+        # #   value: /api/v1/namespaces/default/services/hive:http/proxy
+        resources:
+          limits:
+            cpu: 1000m
+          requests:
+            cpu: 100m
+        ports:
+        - containerPort: 10000
+          name: http
+
+
+---
+
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: mysql
+  labels:
+    component: mysql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+     component: mysql
+  template:
+    metadata:
+      labels:
+        component: mysql
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:5.7
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: "123456"
+        resources:
+          limits:
+            cpu: 1000m
+          requests:
+            cpu: 100m
+        ports:
+        - containerPort: 3306
+          name: mysql
+

@@ -1,0 +1,26 @@
+version: '2'
+services:
+  logpilot:
+    image: registry.cn-hangzhou.aliyuncs.com/acs-sample/log-pilot:latest
+    hostname: logpilot
+    privileged: true
+    environment:
+      - "PILOT_TYPE=filebeat"
+      - "FILEBEAT_OUTPUT=logstash"
+      - "LOGSTASH_HOST=logstash"
+      - "LOGSTASH_PORT=5044"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock 
+      - /:/host
+  tomcat:
+    image: tomcat:latest
+    hostname: tomcat
+    volumes:
+      - /opt/data/tomcat:/usr/local/tomcat/logs/
+    expose:
+      - 8080
+    ports:
+      - 18080:8080
+    labels:
+      - "aliyun.logs.catalina=stdout"
+      - "aliyun.logs.access=/usr/local/tomcat/logs/localhost_access_log.*.txt"

@@ -1,0 +1,99 @@
+# A headless service to create DNS records
+apiVersion: v1
+kind: Service
+metadata:
+  name: resourcemanager-svc
+  labels:
+    component: resourcemanager-svc
+spec:
+  ports:
+  - name: yarn-web
+    port: 8088
+  # *.hadoop-master.hadoop-cluster.svc.cluster.local
+  clusterIP: None
+  selector:
+    component: resourcemanager
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: resourcemanager-nodeport
+  labels:
+    component: resourcemanager-nodeport
+spec:
+  type: NodePort
+  ports:
+  - port: 8088
+    targetPort: 8088
+    nodePort: 32088
+  selector:
+    component: resourcemanager
+---
+
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: resourcemanager
+spec:
+  serviceName: resourcemanager-svc
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        component: resourcemanager
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: resourcemanager
+        image: lizhiyong2000/hadoop:2.8.3
+        ports:
+        - containerPort: 8088
+          name: yarn-web
+
+        # command:
+           # - "/bin/bash"
+           # - "/tmp/hadoop-config/bootstrap.sh"
+           # - "-d"
+        resources:
+          requests:
+            memory: "1024Mi"
+            cpu: "100m"
+          limits:
+            memory: "1024Mi"
+            cpu: "200m"
+        env:
+          - name: NODE_TYPE
+            value: resourcemanager
+        volumeMounts:
+          - name: hadoop-data
+            mountPath: /opt/hadoop/data
+          - name: hadoop-logs
+            mountPath: /opt/hadoop/logs
+        livenessProbe:
+          tcpSocket:
+            port: yarn-web
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: yarn-web
+          initialDelaySeconds: 60
+          periodSeconds: 10
+  volumeClaimTemplates:
+  - metadata:
+      name: hadoop-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 5Gi
+      storageClassName: nfs-storage
+  - metadata:
+      name: hadoop-logs
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+      storageClassName: nfs-storage

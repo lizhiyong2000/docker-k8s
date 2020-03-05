@@ -1,0 +1,122 @@
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: spark-data-pvc
+spec:
+  accessModes: [ "ReadWriteOnce" ]
+  resources:
+    requests:
+      storage: 3Gi
+  storageClassName: nfs-storage
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spark-svc
+  labels:
+    component: spark-svc
+spec:
+  ports:
+  - name: spark
+    port: 7077
+  # *.hadoop-master.hadoop-cluster.svc.cluster.local
+  clusterIP: None
+  selector:
+    component: spark-master
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: master-node
+spec:
+  type: NodePort
+  ports:
+    - port: 7077
+      targetPort: 7077
+      nodePort: 30777
+      name: master
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30880
+      name: master-web
+  selector:
+    component: spark-master
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: worker-node
+spec:
+  type: NodePort
+  ports:
+    - port: 8081
+      targetPort: 8081
+      nodePort: 30881
+  selector:
+    component: spark-worker
+---
+
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: spark-master
+spec:
+  serviceName: spark-svc
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        component: spark-master
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+        - name: spark-master
+          image: lizhiyong2000/spark:2.3.0
+          command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
+          ports:
+            - containerPort: 7077
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 100m
+          volumeMounts:
+          - name: data
+            mountPath: /tmp
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: spark-data-pvc
+
+
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: spark-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      component: spark-worker
+  template:
+    metadata:
+      labels:
+        component: spark-worker
+    spec:
+      containers:
+        - name: spark-worker
+          image: lizhiyong2000/spark:2.3.0
+          command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master-0.spark-svc:7077"]
+          ports:
+            - containerPort: 8081
+          resources:
+            requests:
+              cpu: 100m
+          volumeMounts:
+          - name: data
+            mountPath: /tmp
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: spark-data-pvc
+

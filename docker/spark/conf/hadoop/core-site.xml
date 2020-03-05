@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+	<property>
+		<name>fs.defaultFS</name>
+		<value>hdfs://namenode-0.namenode-svc/</value>
+	</property>
+	<property>
+		<name>hadoop.tmp.dir</name>
+		<value>/opt/hadoop/tmp</value>
+	</property>
+	<property>
+		<name>io.file.buffer.size</name>
+		<value>131072</value>
+	</property>
+</configuration>

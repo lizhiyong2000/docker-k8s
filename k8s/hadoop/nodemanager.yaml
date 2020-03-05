@@ -1,0 +1,89 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nodemanager-svc
+  labels:
+    component: nodemanager-svc
+spec:
+  ports:
+  - name: nm-rpc
+    port: 8040
+  # *.hadoop-master.hadoop-cluster.svc.cluster.local
+  clusterIP: None
+  selector:
+    component: nodemanager
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nodemanager-np
+  labels:
+    component: nodemanager-np
+spec:
+  type: NodePort
+  ports:
+  - port: 8042
+    targetPort: 8042
+    nodePort: 31842
+  selector:
+    component: nodemanager
+---
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: nodemanager
+spec:
+  serviceName: nodemanager-svc
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        component: nodemanager
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: nodemanager
+        image: lizhiyong2000/hadoop:2.8.3
+        ports:
+        - containerPort: 8040
+          name: nm-rpc
+        - containerPort: 8042
+          name: nm-web
+        # - containerPort: 9000
+        #   name: hdfs
+        # command:
+           # - "/bin/bash"
+           # - "/tmp/hadoop-config/bootstrap.sh"
+           # - "-d"
+        resources:
+          requests:
+            memory: "1024Mi"
+            cpu: "100m"
+          limits:
+            memory: "1024Mi"
+            cpu: "200m"
+        env:
+          - name: NODE_TYPE
+            value: nodemanager
+        volumeMounts:
+          - name: hadoop-data
+            mountPath: /opt/hadoop/data
+          - name: hadoop-logs
+            mountPath: /opt/hadoop/logs
+  volumeClaimTemplates:
+  - metadata:
+      name: hadoop-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 5Gi
+      storageClassName: nfs-storage
+  - metadata:
+      name: hadoop-logs
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+      storageClassName: nfs-storage

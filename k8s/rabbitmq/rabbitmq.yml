@@ -1,0 +1,211 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rabbitmq
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rabbitmq 
+  namespace: rabbitmq 
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: endpoint-reader
+  namespace: rabbitmq 
+rules:
+- apiGroups: [""]
+  resources: ["endpoints"]
+  verbs: ["get"]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: endpoint-reader
+  namespace: rabbitmq
+subjects:
+- kind: ServiceAccount
+  name: rabbitmq
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: endpoint-reader
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rabbitmq-data-claim
+  namespace: rabbitmq
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:  
+    requests:
+      storage: 10Gi
+  storageClassName: nfs-storage
+---
+# headless service 用于使用hostname访问pod
+kind: Service
+apiVersion: v1
+metadata:
+  name: rabbitmq-svc
+  namespace: rabbitmq
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true 
+  ports: 
+   - name: epmd
+     port: 4369
+   - name: amqp
+     port: 5672
+   - name: http
+     port: 15672
+   - name: rabbitmq-dist
+     port: 25672
+  selector:
+    app: rabbitmq
+---
+# 用于暴露dashboard到外网
+kind: Service
+apiVersion: v1
+metadata:
+  namespace: rabbitmq
+  name: rabbitmq-nodeport
+spec:
+  type: NodePort
+  ports:
+   - name: http
+     protocol: TCP
+     port: 15672
+     targetPort: 15672 
+     nodePort: 31672   
+   - name: amqp
+     protocol: TCP
+     port: 5672
+     targetPort: 5672  
+     nodePort: 30672
+  selector:
+    app: rabbitmq
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rabbitmq-config
+  namespace: rabbitmq
+data:
+  enabled_plugins: |
+      [rabbitmq_management,rabbitmq_peer_discovery_k8s].
+  rabbitmq.conf: |
+      cluster_formation.peer_discovery_backend  = rabbit_peer_discovery_k8s
+      cluster_formation.k8s.host = kubernetes.default.svc.cluster.local
+      cluster_formation.k8s.address_type = hostname
+      cluster_formation.node_cleanup.interval = 10
+      cluster_formation.node_cleanup.only_log_warning = true
+      cluster_partition_handling = autoheal
+      queue_master_locator=min-masters
+      loopback_users.guest = false
+      cluster_formation.randomized_startup_delay_range.min = 0
+      cluster_formation.randomized_startup_delay_range.max = 2
+      cluster_formation.k8s.service_name = rabbitmq-svc
+      cluster_formation.k8s.hostname_suffix = .rabbitmq-svc.rabbitmq.svc.cluster.local
+      vm_memory_high_watermark.absolute = 1GB
+      disk_free_limit.absolute = 2GB
+---
+# 使用apps/v1版本代替apps/v1beta
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+  namespace: rabbitmq
+spec:
+  serviceName: rabbitmq-svc   # 必须与headless service的name相同，用于hostname传播访问pod
+  selector:
+    matchLabels:
+      app: rabbitmq 
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: rabbitmq  # 在apps/v1中，需与 .spec.selector.matchLabels 相同
+      # 设置podAntiAffinity
+      # annotations:
+      #   scheduler.alpha.kubernetes.io/affinity: >
+      #       {
+      #         "podAntiAffinity": {
+      #           "requiredDuringSchedulingIgnoredDuringExecution": [{
+      #             "labelSelector": {
+      #               "matchExpressions": [{
+      #                 "key": "app",
+      #                 "operator": "In",
+      #                 "values": ["rabbitmq"]
+      #               }]
+      #             },
+      #             "topologyKey": "kubernetes.io/hostname"
+      #           }]
+      #         }
+      #       }
+    spec:
+      serviceAccountName: rabbitmq
+      terminationGracePeriodSeconds: 10
+      containers:        
+      - name: rabbitmq
+        image: lizhiyong2000/rabbitmq:3.7.10
+        resources:
+          limits:
+            cpu: 0.5
+            memory: 2Gi
+          requests:
+            cpu: 0.3
+            memory: 2Gi
+        volumeMounts:
+          - name: config-volume
+            mountPath: /etc/rabbitmq
+          - name: rabbitmq-data
+            mountPath: /var/lib/rabbitmq/mnesia
+        ports:
+          - name: http
+            protocol: TCP
+            containerPort: 15672
+          - name: amqp
+            protocol: TCP
+            containerPort: 5672
+        livenessProbe:
+          exec:
+            command: ["bash", "-c", "rabbitmqctl --erlang-cookie $(cat $HOME/.erlang.cookie) status"]
+          initialDelaySeconds: 60
+          periodSeconds: 60
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command: ["bash", "-c", "rabbitmqctl --erlang-cookie $(cat $HOME/.erlang.cookie) status"]
+          initialDelaySeconds: 20
+          periodSeconds: 60
+          timeoutSeconds: 5
+        imagePullPolicy: Always
+        env:
+          - name: HOSTNAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: RABBITMQ_USE_LONGNAME
+            value: "true"
+          - name: RABBITMQ_NODENAME
+            value: "rabbit@$(HOSTNAME).rabbitmq-svc.rabbitmq.svc.cluster.local"
+          # 若在ConfigMap中设置了service_name，则此处无需再次设置
+          # - name: K8S_SERVICE_NAME
+          #   value: "rabbitmq-svc"
+          - name: RABBITMQ_ERLANG_COOKIE
+            value: "mycookie" 
+      volumes:
+        - name: config-volume
+          configMap:
+            name: rabbitmq-config
+            items:
+            - key: rabbitmq.conf
+              path: rabbitmq.conf
+            - key: enabled_plugins
+              path: enabled_plugins
+        - name: rabbitmq-data
+          persistentVolumeClaim:
+            claimName: rabbitmq-data-claim

@@ -1,0 +1,81 @@
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: datanode
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        component: datanode
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: datanode
+        image: lizhiyong2000/hadoop:2.8.3
+        ports:
+        - containerPort: 50010
+          name: datanode
+        - containerPort: 50020
+          name: datanode-ipc
+        - containerPort: 50075
+          name: datanode-http
+        command:
+           # - "/bin/bash"
+           # - "/tmp/hadoop-data/bootstrap.sh"
+           # - "-d"
+        resources:
+          requests:
+            memory: "1024Mi"
+            cpu: "100m"
+          limits:
+            memory: "1024Mi"
+            cpu: "200m"
+        env:
+          - name: NODE_TYPE
+            value: datanode
+          - name: MY_CPU_LIMIT
+            valueFrom:
+              resourceFieldRef:
+                containerName: datanode
+                resource: limits.cpu
+                divisor: 1
+          - name: MY_MEM_LIMIT
+            valueFrom:
+              resourceFieldRef:
+                containerName: datanode
+                resource: limits.memory
+                divisor: 1M
+        volumeMounts:
+          - name: hadoop-data
+            mountPath: /opt/hadoop/data
+          - name: hadoop-logs
+            mountPath: /opt/hadoop/logs
+        livenessProbe:
+          tcpSocket:
+            port: datanode-ipc
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: datanode-ipc
+          initialDelaySeconds: 60
+          periodSeconds: 10
+  volumeClaimTemplates:
+  - metadata:
+      name: hadoop-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 5Gi
+      storageClassName: nfs-storage
+  - metadata:
+      name: hadoop-logs
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+      storageClassName: nfs-storage
+  

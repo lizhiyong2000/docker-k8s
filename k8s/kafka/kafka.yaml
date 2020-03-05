@@ -1,0 +1,155 @@
+# A headless service to create DNS records
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: broker
+spec:
+  ports:
+  - port: 9092
+  # [podname].broker.kafka.svc.cluster.local
+  clusterIP: None
+  selector:
+    app: kafka
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: broker-0
+spec:
+  type: NodePort
+  ports:
+  - port: 9093
+    nodePort: 30093
+  selector:
+    kafka-set-component: kafka-0
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: broker-1
+spec:
+  type: NodePort
+  ports:
+  - port: 9093
+    nodePort: 30094
+  selector:
+    kafka-set-component: kafka-1
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: broker-2
+spec:
+  type: NodePort
+  ports:
+  - port: 9093
+    nodePort: 30095
+  selector:
+    kafka-set-component: kafka-2
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-cm
+data:
+  jvm.heap: "1G"
+---
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: kafka-pdb
+spec:
+  selector:
+    matchLabels:
+      app: kafka
+  minAvailable: 2
+---
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: kafka
+spec:
+  serviceName: broker
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      # affinity:
+      #   podAntiAffinity:
+      #     requiredDuringSchedulingIgnoredDuringExecution:
+      #       - labelSelector:
+      #           matchExpressions:
+      #             - key: "app"
+      #               operator: In
+      #               values: 
+      #               - kafka
+      #         topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: kafka
+        imagePullPolicy: Always
+        image: lizhiyong2000/kafka:1.1.0
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+        ports:
+        - containerPort: 9092
+          name: client
+        - containerPort: 9093
+          name: client-ex
+        env:
+        - name : ZOO_REPLICAS
+          value: "3"
+        - name : KAFKA_REPLICAS
+          value: "3"
+        - name: KAFKA_PORT
+          value: "9092"
+        - name: KAFKA_LISTENERS
+          value: "PLAINTEXT://:9092"
+        # - name: KAFKA_ADVERTISED_LISTENERS
+        #   value: "PLAINTEXT://192.168.2.42:9092"
+        - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+          value: "INTERNAL_PLAINTEXT:PLAINTEXT,EXTERNAL_PLAINTEXT:PLAINTEXT"
+        - name: KAFKA_ADVERTISED_LISTENERS
+          value: "INTERNAL_PLAINTEXT://127.0.0.1:9092,EXTERNAL_PLAINTEXT://192.168.2.42:9093"
+        - name: KAFKA_LISTENERS
+          value: "INTERNAL_PLAINTEXT://0.0.0.0:9092,EXTERNAL_PLAINTEXT://0.0.0.0:9093"
+        - name: KAFKA_INTER_BROKER_LISTENER_NAME
+          value: "INTERNAL_PLAINTEXT"
+        - name: KAFKA_DELETE_TOPIC_ENABLE
+          value: "true"
+        - name: KAFKA_SOCKET_REQUEST_MAX_BYTES
+          value: "209715200"  
+        #//socket.request.max.bytes
+        # command:
+        # - sh
+        # - -c
+        # - kafkaGenConfig.sh && kafkaServer.sh start-foreground
+        readinessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+        volumeMounts:
+        - name: logdir
+          mountPath: /opt/kafka/logs
+      # securityContext:
+      #   runAsUser: 1001
+      #   fsGroup: 1001
+  volumeClaimTemplates:
+  - metadata:
+      name: logdir
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 5Gi
+      storageClassName: nfs-storage

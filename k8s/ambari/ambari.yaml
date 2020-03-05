@@ -1,0 +1,95 @@
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: ambari
+  labels:
+    name: ambari
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: ambari-server
+spec:
+  selector:
+    component: ambari-server
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: http
+  clusterIP: None
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: ambari-agent
+spec:
+  selector:
+    component: ambari-agent
+  clusterIP: None
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: ambari-server-nodeport
+spec:
+  type: NodePort
+  selector:
+    component: ambari-server
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+      nodePort: 31080
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: ambari-server
+spec:
+  serviceName: ambari-server
+  replicas: 1
+  selector:
+    matchLabels:
+      component: ambari-server
+  template:
+    metadata:
+      labels:
+        component: ambari-server
+    spec:
+      containers:
+        - name: ambari-server
+          image: lizhiyong2000/ambari-server:2.7.3
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 100m
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: ambari-agent
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      component: ambari-agent
+  template:
+    metadata:
+      labels:
+        component: ambari-agent
+    spec:
+      containers:
+        - name: ambari-agent
+          image: lizhiyong2000/ambari-agent:2.7.3
+          # args: ["taskmanager", "jobmanager.rpc.address=ambari-jobmanager-svc.ambari.svc.cluster.local", "blob.server.port=50101"]
+          # ports:
+          #   - containerPort: 6121
+          #   - containerPort: 6122
+          #   - containerPort: 50101
+          resources:
+            requests:
+              cpu: 100m
+
+

@@ -1,0 +1,138 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: es-data-svc
+  labels:
+    component: es-data-svc
+spec:
+  ports:
+  - port: 9200
+    name: client
+    targetPort: 9200
+  - port: 9300
+    name: transport
+  selector:
+    component: elasticsearch
+    role: data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: es-data-svc-nodeport
+  labels:
+    component: es-data-svc-nodeport
+spec:
+  type: NodePort
+  ports:
+  - port: 9200
+    name: client
+    targetPort: 9200
+    nodePort: 30920
+  selector:
+    component: elasticsearch
+    role: data
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: es-cm
+data:
+  jvm.heap: "1G"
+---
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: es-data-pdb
+spec:
+  selector:
+    matchLabels:
+      component: elasticsearch
+      role: data
+  minAvailable: 1
+---
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: es-data
+  labels:
+    component: elasticsearch
+    role: data
+spec:
+  serviceName: es-data-svc
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        component: elasticsearch
+        role: data
+    spec:
+      # initContainers:
+      # - name: init-sysctl
+      #   image: busybox:1.27.2
+      #   command:
+      #   - sysctl
+      #   - -w
+      #   - vm.max_map_count=262144
+      #   securityContext:
+      #     privileged: true
+      containers:
+      - name: es-data
+        image: lizhiyong2000/elasticsearch:6.3.0
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: CLUSTER_NAME
+          value: es_cluster
+        - name: NODE_MASTER
+          value: "true"
+        - name: NODE_DATA
+          value: "true"
+        - name: NODE_INGEST
+          value: "false"
+        - name: HTTP_ENABLE
+          value: "true"
+        - name: ES_JAVA_OPTS
+          value: -Xms1g -Xmx1g
+        - name: PROCESSORS
+          valueFrom:
+            resourceFieldRef:
+              resource: limits.cpu
+        resources:
+          requests:
+            cpu: 0.25
+          limits:
+            cpu: 1
+        ports:
+        - containerPort: 9200
+          name: http
+        - containerPort: 9300
+          name: transport
+        livenessProbe:
+          tcpSocket:
+            port: transport
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: transport
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        volumeMounts:
+        - name: data
+          mountPath: /opt/elasticsearch/data
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 5Gi
+      storageClassName: nfs-storage

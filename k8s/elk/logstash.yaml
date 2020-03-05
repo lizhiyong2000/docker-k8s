@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: logstash
+  labels:
+    component: logstash
+spec:
+  type: NodePort
+  selector:
+    component: logstash
+  ports:
+  - name: expose-port1
+    port: 5044
+    targetPort: port1
+    nodePort: 30544
+  - name: expose-port2
+    port: 9600
+    targetPort: port2
+    nodePort: 30960
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: logstash-pv-claim
+  labels:
+    component: logstash
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Mi
+  storageClassName: nfs-storage
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: logstash
+  labels:
+    component: logstash
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+     component: logstash
+  template:
+    metadata:
+      labels:
+        component: logstash
+    spec:
+      containers:
+        - name: logstash
+          image: lizhiyong2000/logstash:6.3.0
+          env:
+          - name: ELASTICSEARCH_URL
+            value: http://es-data-svc:9200
+          resources:
+            limits:
+              cpu: 1000m
+            requests:
+              cpu: 100m
+          ports:
+          - containerPort: 5044
+            name: port1
+          - containerPort: 9600
+            name: port2
+          volumeMounts:
+          - name: pipeline
+            mountPath: /opt/logstash/pipeline
+      volumes:
+      - name: pipeline
+        persistentVolumeClaim:
+          claimName: logstash-pv-claim

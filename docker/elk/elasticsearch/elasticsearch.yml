@@ -1,0 +1,46 @@
+# cluster.name: "docker-cluster"
+# network.host: 0.0.0.0
+
+# # minimum_master_nodes need to be explicitly set when bound on a public IP
+# # set to 1 to allow single node clusters
+# # Details: https://github.com/elastic/elasticsearch/pull/17288
+# discovery.zen.minimum_master_nodes: 1
+
+
+cluster:
+  name: ${CLUSTER_NAME}
+
+network.host: ${NETWORK_HOST}
+
+node:
+  name: ${NODE_NAME}
+  master: ${NODE_MASTER}
+  data: ${NODE_DATA}
+  ingest: ${NODE_INGEST}
+  # max_local_storage_nodes: ${MAX_LOCAL_STORAGE_NODES}
+
+processors: ${PROCESSORS:1}
+
+
+
+path:
+  data: /opt/elasticsearch/data
+  logs: /opt/elasticsearch/logs
+  # repo: ${REPO_LOCATIONS}
+
+# bootstrap:
+#   memory_lock: ${MEMORY_LOCK}
+
+http:
+  enabled: ${HTTP_ENABLE}
+#   compression: true
+#   cors:
+#     enabled: ${HTTP_CORS_ENABLE}
+#     allow-origin: ${HTTP_CORS_ALLOW_ORIGIN}
+
+discovery:
+  zen:
+    ping.unicast.hosts: ${DISCOVERY_SERVICE}
+    minimum_master_nodes: ${NUMBER_OF_MASTERS}
+
+# xpack.ml.enabled: false

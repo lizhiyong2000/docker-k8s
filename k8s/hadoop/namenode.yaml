@@ -1,0 +1,100 @@
+# A headless service to create DNS records
+apiVersion: v1
+kind: Service
+metadata:
+  name: namenode-svc
+  labels:
+    component: namenode-svc
+spec:
+  ports:
+  - name: hdfs
+    port: 9000
+  # *.hadoop-master.hadoop-cluster.svc.cluster.local
+  clusterIP: None
+  selector:
+    component: namenode
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: namenode-nodeport
+  labels:
+    component: namenode-nodeport
+spec:
+  type: NodePort
+  ports:
+  - port: 50070
+    targetPort: 50070
+    nodePort: 32070
+  selector:
+    component: namenode
+---
+
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: namenode
+spec:
+  serviceName: namenode-svc
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        component: namenode
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: namenode
+        image: lizhiyong2000/hadoop:2.8.3
+        ports:
+        - containerPort: 50070
+          name: hdfs-web
+        - containerPort: 8020
+          name: hdfs
+        # command:
+           # - "/bin/bash"
+           # - "/tmp/hadoop-config/bootstrap.sh"
+           # - "-d"
+        resources:
+          requests:
+            memory: "1024Mi"
+            cpu: "100m"
+          limits:
+            memory: "1024Mi"
+            cpu: "200m"
+        env:
+          - name: NODE_TYPE
+            value: namenode
+        volumeMounts:
+          - name: hadoop-data
+            mountPath: /opt/hadoop/data
+          - name: hadoop-logs
+            mountPath: /opt/hadoop/logs
+        livenessProbe:
+          tcpSocket:
+            port: hdfs
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: hdfs
+          initialDelaySeconds: 60
+          periodSeconds: 10
+  volumeClaimTemplates:
+  - metadata:
+      name: hadoop-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 5Gi
+      storageClassName: nfs-storage
+  - metadata:
+      name: hadoop-logs
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+      storageClassName: nfs-storage

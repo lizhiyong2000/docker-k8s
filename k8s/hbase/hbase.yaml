@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: hbase-svc
+  labels:
+    component: hbase-svc
+spec:
+  type: NodePort
+  selector:
+    component: hbase
+  ports:
+  - name: http
+    port: 16010
+    targetPort: http
+    nodePort: 31610
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: hbase
+  labels:
+    component: hbase
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+     component: hbase
+  template:
+    metadata:
+      labels:
+        component: hbase
+    spec:
+      containers:
+      - name: hbase
+        image: lizhiyong2000/hbase:2.1.0
+        # env:
+        # - name: CLUSTER_NAME
+        #   value: es_cluster
+        # - name: ELASTICSEARCH_URL
+        #   value: http://es-data-svc:9200
+        # # - name: SERVER_BASEPATH
+        # #   value: /api/v1/namespaces/default/services/hbase:http/proxy
+        resources:
+          limits:
+            cpu: 1000m
+          requests:
+            cpu: 100m
+        ports:
+        - containerPort: 16010
+          name: http
